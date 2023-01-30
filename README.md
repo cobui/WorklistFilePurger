@@ -5,6 +5,7 @@ An Orthanc Plugin for clearing the Modality Worklist files, once the instance re
 When an Instance with a matching accession number or Study Instance UID received in Orthanc PACS, this plugin will remove the corresponding worklist entry from the worklist database folder. 
 The plugin reads the worklist database path from the "ModalityWorklists" section of the Orthanc Configuration, therefore it is mandatory to have this section available in the Orthanc Configuration file for the smooth working of the plugin.
 
+!!!CURRENTLY NOT ACTIVE!!!
 This plugin also provides the REST interface option to "On" or "Off" the functioning of the Plugin.
 ```bash
 /enableWorklistPurge     ==> Enable/On the Plugin functionality             // http://localhost:8042/enableWorklistPurge
