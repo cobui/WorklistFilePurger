@@ -31,6 +31,7 @@
 #include <string.h>
 #include <iostream>
 #include <algorithm>
+#include <regex>
 
 #define DCM_TAG_STDIUID "0020,000d"
 #define DCM_TAG_ACCNO "0008,0050"
@@ -39,352 +40,98 @@ static std::string folder_;
 
 bool worklistPurgerRESTStatus;
 
+OrthancPluginErrorCode getStudyUID(const char* resourceId, std::string *result) {
+    char info[1024];
+    OrthancPluginContext *context = OrthancPlugins::GetGlobalContext();
+    OrthancPluginMemoryBuffer answerBody;
+    const char* orthancUrl = "/studies/";
+    char* uri;
+    uri = (char*) calloc(strlen(orthancUrl) + strlen(resourceId) + 1, sizeof(char));
+    strcpy(uri, orthancUrl);
+    strcat(uri, resourceId);
 
-static void CacheTheDetailsToLocalFile(const char* incomingFileStdIUID, const char* inComingFileAccessionNumber){
-  time_t t = time(0);   // get time now
-  struct tm * now = localtime( & t );
+    OrthancPluginRestApiGet(context, &answerBody, uri);
 
-  char pathBuffer [128] = {0};
-  strftime (pathBuffer, 128, "WorklistPurgeCache_%Y-%m-%d.json", now);
+    // Parse JSON
+    Json::Value studyJSON;
+    char *begin, *end;
+    begin = (char*)answerBody.data;
+    std::string s((const char*)answerBody.data);
+    end = begin + (s.length() - 1);
 
-  std::fstream jfile;
-  jfile.open (pathBuffer, std::ios::in);
+    Json::CharReaderBuilder builder {};
 
-  Json::Reader reader;
-  Json::Value json_obj;
+    auto reader = std::unique_ptr<Json::CharReader>( builder.newCharReader() );
 
-  if(!reader.parse(jfile, json_obj, true))
-  {
-      // json file must contain an array
-      std::cerr << "could not parse the json file" << std::endl;
-      // return;
-  }
+    Json::Value parsed_study {};
+    std::string errors {};
+    const auto is_parsed = reader->parse(begin,end,&parsed_study,&errors );
+    OrthancPluginFreeMemoryBuffer(context, &answerBody);
 
-  jfile.close();
-
-  Json::Value m_event;
-  m_event["study"]["accesionNo"] = inComingFileAccessionNumber;
-  m_event["study"]["studyIUID"] = incomingFileStdIUID;//msg;
-
-  // append to json object
-  json_obj.append(m_event);
-
-  std::cout << json_obj.toStyledString() << std::endl;
-
-  // write updated json object to file
-  jfile.open(pathBuffer, std::ios::out);
-  jfile << json_obj.toStyledString() << std::endl;
-  jfile.close();
-}
-
-//Checking for already processed DICOM instance. 
-bool IsThisStudyAlreadyProcessed(const char* incomingFileStdIUID, const char* inComingFileAccessionNumber){
-
-  bool bFoundAlreadyProcessedEntry = false;
-  time_t t = time(0);   // get time now
-  struct tm * now = localtime( & t );
-
-  char pathBuffer [128] = {0};
-  strftime (pathBuffer, 128, "WorklistPurgeCache_%Y-%m-%d.json", now);
-
-  std::fstream jfile;
-  jfile.open (pathBuffer, std::ios::in);
-
-  Json::Reader reader;
-  Json::Value json_obj;
-
-  if(!reader.parse(jfile, json_obj, true))
-  {
-      // json file must contain an array
-      std::cerr << "could not parse the json file" << std::endl;
-      return bFoundAlreadyProcessedEntry;
-  }
-
-  jfile.close();
-
-  for (int i = 0; i < json_obj.size(); i++){
-      
-      const char* studyIUIDCached = json_obj[i]["study"]["studyIUID"].asString().c_str();
-      const char* accNoCached = json_obj[i]["study"]["accesionNo"].asString().c_str();
-
-      
-      if(0 == strcmp(studyIUIDCached, incomingFileStdIUID) || 
-          0 == strcmp(accNoCached, inComingFileAccessionNumber)){
-              bFoundAlreadyProcessedEntry = true;
-
-              break;
-          }
-  }
-
-  return bFoundAlreadyProcessedEntry;
-}
-
-
-// Getting the tags of the created instance is done by a quick-and-dirty parsing of a JSON string.
-static void getDicomTag(char* json, char* tag, char* tagValue, unsigned int len)
-{
-	char *jsonText = (char *)malloc((strlen(json) + 1) * sizeof(char));
-	strcpy(jsonText, json);
-
-	if (strlen(tag) < 100)
-	{
-		char tagText[100] = "\"";
-		strcat(tagText, tag);
-		strcat(tagText, "\" : \"");
-
-		char* value = strstr(jsonText, tagText);
-		int offset = strlen(tagText);
-		value = value + offset;
-		char* eos = strchr(value, '\"');
-		eos[0] = '\0';
-		//sprintf(buffer, "value[%d]=%s", strlen(value), value);
-		//OrthancPluginLogWarning(context, buffer);
-
-		if (strlen(value) < len-1)
-			strcpy(tagValue, value);
-		else
-			strcpy(tagValue, "TAG ERROR");
-	}
-	else
-		strcpy(tagValue, "VALUE ERROR");
-
-	free(jsonText);
-}
-
-static bool ReadAndVerifyWorklistFile(std::string& result,
-                     const std::string& worklistPath, const char* incomingFileStdIUID, const char* inComingFileAccessionNumber)
-{
-  
-  OrthancPlugins::MemoryBuffer dicom;
-  try{
-    OrthancPluginContext* context = OrthancPlugins::GetGlobalContext();
-    dicom.ReadFile(worklistPath);
-
-    // Convert the DICOM as JSON, and dump it to the user in "--verbose" mode
-    Json::Value json;
-    dicom.DicomToJson(json, OrthancPluginDicomToJsonFormat_Short,
-                      static_cast<OrthancPluginDicomToJsonFlags>(0), 0);
-
-    char workliststdIUID[64] = {0};
-    char worklistAccNo[64] = {0};
-
-    bool bFoundStdIUID = false, bFoundAccessionNo = false;
-    
-    for (Json::Value::const_iterator it=json.begin(); it!=json.end(); ++it)
+    if ( is_parsed != 0 )
     {
-      const char *dcmTag =  it.key().asString().c_str();
-      if(0 == strcmp(DCM_TAG_STDIUID, dcmTag)){
-        strcpy(workliststdIUID, it->asString().c_str());
-        bFoundStdIUID = true;
-      }
-
-      if(0 == strcmp(DCM_TAG_ACCNO, dcmTag)){
-        OrthancPlugins::LogWarning("Getting Accession No");
-        OrthancPlugins::LogWarning(it->asString().c_str());
-        strcpy(worklistAccNo, it->asString().c_str());
-        bFoundAccessionNo = true;
-      }
-
-      if(bFoundStdIUID){
-        break;
-      }
-
+        OrthancPluginLogError(OrthancPlugins::GetGlobalContext(), "Parsing API response was not successful");
+        return OrthancPluginErrorCode_BadJson;
     }
 
-    if(!bFoundAccessionNo && !bFoundStdIUID){
-        OrthancPluginLogInfo(context, "StudyIUID and AccessionNo are empty in the Worklist file, hence returning");
-        return false;
+    try {
+        std::string studyUID = parsed_study["MainDicomTags"]["StudyInstanceUID"].asString();
+        sprintf(info, "Study Instance UID of the stable study: %s", studyUID.c_str());
+        OrthancPluginLogInfo(OrthancPlugins::GetGlobalContext(), info);
+        *result = studyUID;
+        return OrthancPluginErrorCode_Success;
     }
-      
-
-    char logBuffer[256] = {0};
-
-    if(0 == strcmp(workliststdIUID, incomingFileStdIUID) || 0 == strcmp(worklistAccNo, inComingFileAccessionNumber)){
-      sprintf(logBuffer, "Found matching worklist");
-      OrthancPluginLogInfo(context, logBuffer);
-
-      memset(logBuffer, 0, sizeof(logBuffer));
-
-      sprintf(logBuffer, "Std IUID from Worklist file=%s\tStd IUID from incoming DICOM file=%s\nAccession No from Worklist=%s\tAccession No from incoming DICOM file=%s", 
-                  workliststdIUID, incomingFileStdIUID, worklistAccNo, inComingFileAccessionNumber);
-
-      OrthancPluginLogInfo(context, logBuffer);
-      CacheTheDetailsToLocalFile(incomingFileStdIUID, inComingFileAccessionNumber);
-      return true;
-    }
-
-    return false;
-  }
-  catch (...)
-  {
-    return false;
-  }
- 
-}
-
-
-
-
-ORTHANC_PLUGINS_API OrthancPluginErrorCode EnableWorklistPurger(OrthancPluginRestOutput* output,
-  const char* url, const OrthancPluginHttpRequest* request) {
-    worklistPurgerRESTStatus = true;
-  std::string HtmlCode = "<html>\n<head>\n<title>Plugin1</title>\n</head>\n<body>Worklist Purger enabled</body>\n</html>\n";
-  OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, HtmlCode.c_str(), HtmlCode.length(), "text/html");
-  return OrthancPluginErrorCode_Success;
-}
-
-ORTHANC_PLUGINS_API OrthancPluginErrorCode DisableWorklistPurger(OrthancPluginRestOutput* output,
-  const char* url, const OrthancPluginHttpRequest* request) {
-    worklistPurgerRESTStatus = false;
-  std::string HtmlCode = "<html>\n<head>\n<title>Plugin1</title>\n</head>\n<body>Worklist Purger disabled</body>\n</html>\n";
-  OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, HtmlCode.c_str(), HtmlCode.length(), "text/html");
-  return OrthancPluginErrorCode_Success;
-}
-
-ORTHANC_PLUGINS_API OrthancPluginErrorCode WorklistPurgerStatus(OrthancPluginRestOutput* output,
-  const char* url, const OrthancPluginHttpRequest* request) {
-    if(worklistPurgerRESTStatus){
-      std::string HtmlCode = "<html>\n<head>\n<title>Plugin1</title>\n</head>\n<body>Worklist Purger Status is: Enabled</body>\n</html>\n";
-      OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, HtmlCode.c_str(), HtmlCode.length(), "text/html");
-    }
-    else
+    catch ( const Json::Exception& error )
     {
-      std::string HtmlCode = "<html>\n<head>\n<title>Plugin1</title>\n</head>\n<body>Worklist Purger Status is: Disabled</body>\n</html>\n";
-      OrthancPluginAnswerBuffer(OrthancPlugins::GetGlobalContext(), output, HtmlCode.c_str(), HtmlCode.length(), "text/html");
+        sprintf(info, "Accessing Study Instance UID failed: %s", error.what());
+        OrthancPluginLogError(OrthancPlugins::GetGlobalContext(), info);
+        return OrthancPluginErrorCode_InexistentTag;
     }
-  
-  return OrthancPluginErrorCode_Success;
 }
 
-OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,
-                                             OrthancPluginResourceType resourceType,
-                                             const char* resourceId)
-{
-  char info[1024];
-  OrthancPluginMemoryBuffer tmp;
-
-  sprintf(info, "Change %d on resource %s of type %d", changeType, resourceId, resourceType);
-  OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), info);
-
-  if (changeType == OrthancPluginChangeType_NewInstance)
-  {
-    // sprintf(info, "/instances/%s/metadata/AnonymizedFrom", resourceId);
-    sprintf(info, "/instances/%s/metadata?expand", resourceId);
-    if (OrthancPluginRestApiGet(OrthancPlugins::GetGlobalContext(), &tmp, info) == 0)
-    {
-      sprintf(info, "\n*****  Instance %s comes from OnChangeCallback", resourceId);
-      strncat(info, (const char*) tmp.data, tmp.size);
-      OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), info);
-      OrthancPluginFreeMemoryBuffer(OrthancPlugins::GetGlobalContext(), &tmp);
-    }
-  }
-
-  return OrthancPluginErrorCode_Success;
-}
-
-OrthancPluginErrorCode OnStoredCallback(const OrthancPluginDicomInstance* instance,
-                                        const char* instanceId)
-{
-  OrthancPluginContext* context = OrthancPlugins::GetGlobalContext();
-  char buffer[1024] = {0};
-  sprintf(buffer, "Just received a DICOM instance of size %d and ID %s from origin %d (AET %s)", 
-          (int) OrthancPluginGetInstanceSize(context, instance), instanceId, 
-          OrthancPluginGetInstanceOrigin(context, instance),
-          OrthancPluginGetInstanceRemoteAet(context, instance));
-  OrthancPluginLogInfo(context, buffer);
-
-  if(!worklistPurgerRESTStatus){
-    memset(buffer, 0, sizeof(buffer));
-    sprintf(buffer, "\n******    WorklistFilesPurger Plugin disabled ******\n");
-    OrthancPluginLogInfo(context, buffer);
-    return OrthancPluginErrorCode_Success;
-  }
-  
-
-  char studyInstanceUIDStr[64] = {0}; // Max length of UID can be 64
-  char accessionNumber[64] = {0};
-  char buffer1[512] = {0};
-
-  char* jsonIncomingDICOM;
-  jsonIncomingDICOM = OrthancPluginGetInstanceSimplifiedJson(context, instance);
-
-  // strcpy(studyInstanceUIDStr, "1.2.276.0.7230010.3.2.101");
-  getDicomTag(jsonIncomingDICOM, "StudyInstanceUID", studyInstanceUIDStr, 64);  
-  getDicomTag(jsonIncomingDICOM, "AccessionNumber", accessionNumber, 64);  
-
-  sprintf(buffer1, "\n******\n\n    StudyInstanceUID=%s\n    AccessionNumber=%s\n*********\n", studyInstanceUIDStr, accessionNumber);
-  OrthancPluginLogInfo(context, buffer1);
-
-  if(strlen(studyInstanceUIDStr) == 0 && strlen(accessionNumber) == 0){
-
-    OrthancPlugins::LogWarning("Both Study IUID and Accesssion Number are empty in the received instance, hence returning");
-    return OrthancPluginErrorCode_Success;
-  }
-
-
-  // Checking for already processed Study
-  if(IsThisStudyAlreadyProcessed(studyInstanceUIDStr, accessionNumber)){
-
-    OrthancPluginLogInfo(context, "Worklist file purging already done for this instance");
-    return OrthancPluginErrorCode_Success;
-  }
-
-  //Loop over the regular files in the database folder
+void verifyAndRemoveWorklistFile(std::string studyUID) {
   namespace fs = boost::filesystem;
-
   fs::path source(folder_);
   fs::directory_iterator end;
 
-  try
-  {
-    for (fs::directory_iterator it(source); it != end; ++it)
-    {
-      fs::file_type type(it->status().type());
+  for (fs::directory_iterator it(source); it != end; ++it) {
+    std::string filename = it->path().filename().string();
+    std::string match_string = "(worklist_" + studyUID + "_)(.*)";
 
-      if (type == fs::regular_file ||
-            type == fs::reparse_file)   // cf. BitBucket issue #11
-      {
-          std::string extension = fs::extension(it->path());
-          std::transform(extension.begin(), extension.end(), extension.begin(), tolower);  // Convert to lowercase
+    if (std::regex_match(filename, std::regex(match_string))) {
+        std::string log_info = "Found a matching worklist file file for Study Instance UID " + studyUID;
+        OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), log_info.c_str());
 
-          if (extension == ".wl")
-          {
+        if (remove(it->path())) {
+            std::string log_info = "Worklist file was successfully deleted";
+            OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), log_info.c_str());
+        } else {
+            std::string log_info = "Unable to delete worklist file";
+            OrthancPluginLogError(OrthancPlugins::GetGlobalContext(), log_info.c_str());
+        };
 
-            const char* filePath = it->path().string().c_str();
-            memset(buffer1, 0, sizeof(0));
-            sprintf(buffer1, "\n******    Worklist File Path =%s ******\n", filePath);
-
-            OrthancPluginLogInfo(context, buffer1);
-
-            
-            std::string result;
-            bool foundMatchingWorklist = ReadAndVerifyWorklistFile(result, filePath, studyInstanceUIDStr, accessionNumber);
-
-            if(foundMatchingWorklist){
-
-              memset(buffer1, 0, sizeof(buffer1));
-              sprintf(buffer1, "\n******    Removing the worklist file %s ******", filePath);
-              OrthancPluginLogInfo(context, buffer1);
-              
-              remove(filePath);
-
-              break;
-
-            }  
-
-          }
-      }
+        return;
     }
   }
-  catch (fs::filesystem_error&)
-  {
-    OrthancPlugins::LogError("Inexistent folder while scanning for worklists: " + source.string());
-    return OrthancPluginErrorCode_DirectoryExpected;
+  std::string log_info = "No worklist file for Study Instance UID " + studyUID + " found";
+  OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), log_info.c_str());
+
+  return;
+}
+
+OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,OrthancPluginResourceType resourceType,
+                                             const char* resourceId)
+{
+  char info[1024];
+  if (changeType == OrthancPluginChangeType_StableStudy ) {
+    std::string studyUID;
+    getStudyUID(resourceId, &studyUID);
+
+    verifyAndRemoveWorklistFile(studyUID);
   }
 
   return OrthancPluginErrorCode_Success;
 }
-
 
 extern "C"
 {
@@ -425,12 +172,11 @@ extern "C"
       {
         //Registering Callbacks
 
-        OrthancPluginRegisterOnStoredInstanceCallback(OrthancPlugins::GetGlobalContext(), OnStoredCallback);
-        OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/enableWorklistPurge", EnableWorklistPurger);
-        OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/disableWorklistPurge", DisableWorklistPurger);
-        OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/worklistPurgeStatus", WorklistPurgerStatus);
+        OrthancPluginRegisterOnChangeCallback(OrthancPlugins::GetGlobalContext(), OnChangeCallback);
+//         OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/enableWorklistPurge", EnableWorklistPurger);
+//         OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/disableWorklistPurge", DisableWorklistPurger);
+//         OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/worklistPurgeStatus", WorklistPurgerStatus);
 	      
-	// OrthancPluginRegisterOnChangeCallback(OrthancPlugins::GetGlobalContext(), OnChangeCallback);
 
 
       }
