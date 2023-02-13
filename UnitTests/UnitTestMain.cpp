@@ -123,7 +123,8 @@ TEST_F(WorklistRemoverTest, verifyAndRemoveWorklist) {
 
     for (int i = 1; i < 10; i+=2) {
         std::string string_i = std::to_string(i);
-        std::string filename = "worklist_12.234.1234.23456" + string_i + "_unixtime.wl";
+        std::string studyUID = "12.234.1234.23456" + string_i;
+        std::string filename = "worklist_" + studyUID + "_unixtime.wl";
         std::string full_file_path = folder_ + "/" + filename;
 
         const char* file = full_file_path.c_str();
@@ -131,7 +132,7 @@ TEST_F(WorklistRemoverTest, verifyAndRemoveWorklist) {
 
         ASSERT_TRUE(file_pointer != NULL);
         fclose(file_pointer);
-        purger_->verifyAndRemoveWorklistFile(("12.234.1234.23456" + string_i));
+        purger_->verifyAndRemoveWorklistFile(&studyUID);
         std::ifstream ifile;
         ifile.open(file);
         ASSERT_FALSE(ifile);

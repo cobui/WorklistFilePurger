@@ -65,35 +65,37 @@ namespace OrthancPlugins {
         try {
             std::string studyUID = parsed_study["MainDicomTags"]["StudyInstanceUID"].asString();
             LOG(INFO) << "Study Instance UID of the stable study: %s" << studyUID;
-            *result = studyUID;
+
+            escapeDotsInFilename(&studyUID, result);
             return OrthancPluginErrorCode_Success;
         }
         catch ( const Json::Exception& error )
         {
-            LOG(ERROR) << "Accessing Study Instance UID failed: %s" << error.what();
+            LOG(ERROR) << "Accessing Study Instance UID failed: " << error.what();
             return OrthancPluginErrorCode_InexistentTag;
         }
     };
 
-    void WorklistPurger::verifyAndRemoveWorklistFile(std::string studyUID) {
+    void WorklistPurger::escapeDotsInFilename(std::string* studyUID, std::string* escaped_studyUID) {
+        for (auto it = (*studyUID).cbegin() ; it != (*studyUID).cend(); ++it) {
+            if (*it == '.') {
+                *escaped_studyUID += "\\";
+            }
+            *escaped_studyUID += *it;
+        }
+    }
+
+    void WorklistPurger::verifyAndRemoveWorklistFile(std::string* escaped_studyUID) {
         namespace fs = boost::filesystem;
         fs::path source(folder_);
         fs::directory_iterator end;
-        std::string escaped_studyUID;
-
-        for (auto it = studyUID.cbegin() ; it != studyUID.cend(); ++it) {
-            if (*it == '.') {
-                escaped_studyUID += "\\";
-            }
-            escaped_studyUID += *it;
-        }
 
         for (fs::directory_iterator it(source); it != end; ++it) {
             std::string filename = it->path().filename().string();
-            std::string match_string = "(worklist_" + escaped_studyUID + "_)(.*)";
+            std::string match_string = "(worklist_" + (*escaped_studyUID) + "_)(.*)";
 
             if (std::regex_match(filename, std::regex(match_string))) {
-                LOG(WARNING) << "Found a matching worklist file file for Study Instance UID " << studyUID;
+                LOG(WARNING) << "Found a matching worklist file file for Study Instance UID " << *escaped_studyUID;
                 if (remove(it->path())) {
                     LOG(WARNING) << "Worklist file was successfully deleted";
                 } else {
@@ -102,7 +104,7 @@ namespace OrthancPlugins {
                 return;
             }
         }
-        LOG(WARNING) << "No worklist file for Study Instance UID " << studyUID << " found";
+        LOG(WARNING) << "No worklist file for Study Instance UID " << *escaped_studyUID << " found";
         return;
     };
 
@@ -112,7 +114,7 @@ namespace OrthancPlugins {
             std::string studyUID;
             getStudyUID(resourceId, &studyUID);
 
-            verifyAndRemoveWorklistFile(studyUID);
+            verifyAndRemoveWorklistFile(&studyUID);
         }
 
         return OrthancPluginErrorCode_Success;
