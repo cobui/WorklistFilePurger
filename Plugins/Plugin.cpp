@@ -21,14 +21,7 @@
 #include "Purger.h"
 #include <orthanc/OrthancCPlugin.h>
 #include "../../Common/OrthancPluginCppWrapper.h"
-
-#include <boost/filesystem.hpp>
-#include <json/value.h>
-#include <json/reader.h>
-#include <string.h>
-#include <iostream>
-#include <algorithm>
-#include <regex>
+#include "/usr/local/include/orthanc_sources/Logging.h"
 
 #define DCM_TAG_STDIUID "0020,000d"
 #define DCM_TAG_ACCNO "0008,0050"
@@ -38,105 +31,6 @@ static std::string folder_;
 static OrthancPluginContext* context_ = NULL;
 static OrthancPlugins::WorklistPurger* purger_;
 
-bool worklistPurgerRESTStatus;
-
-// OrthancPluginErrorCode getStudyUID(const char* resourceId, std::string *result) {
-//     char info[1024];
-//     OrthancPluginContext *context = OrthancPlugins::GetGlobalContext();
-//     OrthancPluginMemoryBuffer answerBody;
-//     const char* orthancUrl = "/studies/";
-//     char* uri;
-//     uri = (char*) calloc(strlen(orthancUrl) + strlen(resourceId) + 1, sizeof(char));
-//     strcpy(uri, orthancUrl);
-//     strcat(uri, resourceId);
-//
-//     OrthancPluginRestApiGet(context, &answerBody, uri);
-//
-//     // Parse JSON
-//     Json::Value studyJSON;
-//     char *begin, *end;
-//     begin = (char*)answerBody.data;
-//     std::string s((const char*)answerBody.data);
-//     end = begin + (s.length() - 1);
-//
-//     Json::CharReaderBuilder builder {};
-//
-//     auto reader = std::unique_ptr<Json::CharReader>( builder.newCharReader() );
-//
-//     Json::Value parsed_study {};
-//     std::string errors {};
-//     const auto is_parsed = reader->parse(begin,end,&parsed_study,&errors );
-//     OrthancPluginFreeMemoryBuffer(context, &answerBody);
-//
-//     if ( is_parsed != 0 )
-//     {
-//         OrthancPluginLogError(OrthancPlugins::GetGlobalContext(), "Parsing API response was not successful");
-//         return OrthancPluginErrorCode_BadJson;
-//     }
-//
-//     try {
-//         std::string studyUID = parsed_study["MainDicomTags"]["StudyInstanceUID"].asString();
-//         sprintf(info, "Study Instance UID of the stable study: %s", studyUID.c_str());
-//         OrthancPluginLogInfo(OrthancPlugins::GetGlobalContext(), info);
-//         *result = studyUID;
-//         return OrthancPluginErrorCode_Success;
-//     }
-//     catch ( const Json::Exception& error )
-//     {
-//         sprintf(info, "Accessing Study Instance UID failed: %s", error.what());
-//         OrthancPluginLogError(OrthancPlugins::GetGlobalContext(), info);
-//         return OrthancPluginErrorCode_InexistentTag;
-//     }
-// }
-//
-// void verifyAndRemoveWorklistFile(std::string studyUID) {
-//   namespace fs = boost::filesystem;
-//   fs::path source(folder_);
-//   fs::directory_iterator end;
-//   std::cout << folder_ << "\n";
-//   for (fs::directory_iterator it(source); it != end; ++it) {
-//     std::string filename = it->path().filename().string();
-//     std::string match_string = "(worklist_" + studyUID + "_)(.*)";
-//     //std::cout << it->path().filename().string() << "\n";
-//
-//     if (std::regex_match(filename, std::regex(match_string))) {
-//         std::string log_info = "Found a matching worklist file file for Study Instance UID " + studyUID;
-//         //std::cout << "Found a matching worklist file file for Study Instance UID " << "\n";
-//         std::cout << context_ << "\n";
-//         OrthancPluginLogWarning(context_, log_info.c_str());
-//
-//         if (remove(it->path())) {
-//             std::string log_info = "Worklist file was successfully deleted";
-//             //std::cout << "Worklist file was successfully deleted" << "\n";
-//             //OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), log_info.c_str());
-//         } else {
-//             std::string log_info = "Unable to delete worklist file";
-//             //std::cout << "Unable to delete worklist file" << "\n";
-//             //OrthancPluginLogError(OrthancPlugins::GetGlobalContext(), log_info.c_str());
-//         };
-//
-//         return;
-//     }
-//   }
-//   std::string log_info = "No worklist file for Study Instance UID " + studyUID + " found";
-//   //OrthancPluginLogWarning(OrthancPlugins::GetGlobalContext(), log_info.c_str());
-//
-//   return;
-// }
-
-// OrthancPluginErrorCode OnChangeCallback(OrthancPluginChangeType changeType,OrthancPluginResourceType resourceType,
-//                                              const char* resourceId)
-// {
-//   char info[1024];
-//   if (changeType == OrthancPluginChangeType_StableStudy ) {
-//     std::string studyUID;
-//     getStudyUID(resourceId, &studyUID);
-//
-//     verifyAndRemoveWorklistFile(studyUID);
-//   }
-//
-//   return OrthancPluginErrorCode_Success;
-// }
 
 OrthancPluginErrorCode OnChange(OrthancPluginChangeType changeType,OrthancPluginResourceType resourceType, const char*
                                                                                                            resourceId) {
@@ -146,24 +40,20 @@ OrthancPluginErrorCode OnChange(OrthancPluginChangeType changeType,OrthancPlugin
 
 extern "C" {
     ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* c) {
-        OrthancPlugins::SetGlobalContext(c);
         context_ = c;
+        OrthancPlugins::SetGlobalContext(context_);
+        Orthanc::Logging::InitializePluginContext(context_);
 
         /* Check the version of the Orthanc core */
         if (OrthancPluginCheckVersion(context_) == 0) {
-            char info[1024];
-            sprintf(info, "Your version of Orthanc (%s) must be above %d.%d.%d to run this plugin",
-                  OrthancPlugins::GetGlobalContext()->orthancVersion,
-                  ORTHANC_PLUGINS_MINIMAL_MAJOR_NUMBER,
-                  ORTHANC_PLUGINS_MINIMAL_MINOR_NUMBER,
-                  ORTHANC_PLUGINS_MINIMAL_REVISION_NUMBER);
-            OrthancPluginLogError(context_, info);
+            LOG(ERROR) << "Your version of Orthanc" <<( OrthancPlugins::GetGlobalContext()->orthancVersion)
+                       <<  "must be above "
+                       <<  ORTHANC_PLUGINS_MINIMAL_MAJOR_NUMBER <<"." <<ORTHANC_PLUGINS_MINIMAL_MINOR_NUMBER <<"."
+                       << ORTHANC_PLUGINS_MINIMAL_REVISION_NUMBER << "to run this plugin";
         return -1;
         }
 
-        worklistPurgerRESTStatus = true;
-
-        OrthancPlugins::LogWarning("WorklistFilePurger :  plugin is initializing");
+        LOG(WARNING) << "WorklistFilePurger :  plugin is initializing";
         OrthancPluginSetDescription(c, "Delete worklist file after receiving a matching instance in Orthanc PACS");
 
 
@@ -183,23 +73,19 @@ extern "C" {
                 purger_ = new OrthancPlugins::WorklistPurger(context_, folder_);
                 OrthancPluginRegisterOnChangeCallback(context_, OnChange);
             } catch (std::exception& e) {
-                OrthancPluginLogError(context_, e.what());
+                LOG(ERROR) << e.what();
                 return -1;
             }
-//         OrthancPluginRegisterOnChangeCallback(context_, OnChangeCallback);
-//         OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/enableWorklistPurge", EnableWorklistPurger);
-//         OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/disableWorklistPurge", DisableWorklistPurger);
-//         OrthancPluginRegisterRestCallback(OrthancPlugins::GetGlobalContext(), "/worklistPurgeStatus", WorklistPurgerStatus);
         return 0;
         } else {
-            OrthancPlugins::LogError("WorklistFilePurger : The configuration option \"Worklists.Database\" must contain a path in the ORthanc configuration file");
+            LOG(ERROR) << "WorklistFilePurger : The configuration option \"Worklists.Database\" must contain a path in the ORthanc configuration file";
             return -1;
         }
 
     }
     else
     {
-      OrthancPlugins::LogWarning("WorklistFilePurger : Worklist server is disabled in the ORthanc configuration file");
+      LOG(WARNING) << "WorklistFilePurger : Worklist server is disabled in the ORthanc configuration file";
     }
 
     return 0;
@@ -209,7 +95,7 @@ extern "C" {
 
   ORTHANC_PLUGINS_API void OrthancPluginFinalize()
   {
-    OrthancPlugins::LogWarning("WorklistFilePurger plugin is finalizing");
+    LOG(WARNING) << "WorklistFilePurger plugin is finalizing";
   }
 
 

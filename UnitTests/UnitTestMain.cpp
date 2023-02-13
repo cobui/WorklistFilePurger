@@ -23,15 +23,11 @@
 
 #include <orthanc/OrthancCPlugin.h>
 #include "../../Common/OrthancPluginCppWrapper.h"
+#include "/usr/local/include/orthanc_sources/Logging.h"
 
 #include <boost/filesystem.hpp>
 #include <boost/system/error_code.hpp>
-#include <json/value.h>
-#include <json/reader.h>
-#include <string.h>
 #include <iostream>
-#include <algorithm>
-#include <regex>
 #include <filesystem>
 #include "../Plugins/Purger.h"
 
@@ -59,13 +55,16 @@ const void* params)
     return OrthancPluginErrorCode_Success;
 }
 
-void PluginFreeMemoryMock(void* buffer) {
-    free(buffer);
+OrthancPluginErrorCode logServiceMock(struct _OrthancPluginContext_t* context,_OrthancPluginService service,
+const void* params)
+{
+    return OrthancPluginErrorCode_Success;
 }
 
 class WorklistRemoverTest : public ::testing::Test {
     protected:
         std::unique_ptr<OrthancPluginContext> context_;
+        OrthancPluginContext pluginContext_;
         std::unique_ptr<OrthancPlugins::WorklistPurger> purger_;
         std::string folder_;
 
@@ -73,7 +72,12 @@ class WorklistRemoverTest : public ::testing::Test {
         namespace fs = std::filesystem;
         context_ = std::make_unique<OrthancPluginContext>();
         context_->InvokeService = &PluginServiceMock;
-        context_->Free = &PluginFreeMemoryMock;
+        context_->Free = &free;
+        //making unique pointer throws error
+        //no viable conversion from 'std::unique_ptr<OrthancPluginContext>' (aka 'unique_ptr<_OrthancPluginContext_t>') to 'void *'
+        pluginContext_.InvokeService = &logServiceMock;
+        Orthanc::Logging::InitializePluginContext(&pluginContext_);
+
 
         //create a directory for dummy files
         fs::path p = fs::current_path() ;
@@ -84,7 +88,7 @@ class WorklistRemoverTest : public ::testing::Test {
             folder_ = p.generic_string();
             purger_ = std::make_unique<OrthancPlugins::WorklistPurger>(context_.get(), folder_);
         } else {
-            std::cerr << "Creating worklist_files testfolder was not successful" << "\n";
+            std::cerr << "Error Code: "<< ec << "\nCreating worklist_files testfolder was not successful" << "\n";
             return;
         };
 
