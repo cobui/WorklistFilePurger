@@ -20,17 +20,15 @@
 
 #include "Purger.h"
 #include <orthanc/OrthancCPlugin.h>
-#include "../../Common/OrthancPluginCppWrapper.h"
+#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 #include "/usr/local/include/orthanc_sources/Logging.h"
-
-#define DCM_TAG_STDIUID "0020,000d"
-#define DCM_TAG_ACCNO "0008,0050"
-#define WORKLIST_PURGE_CACHE "WorklistPurgeCache"
+//#include <Logging.h>
+#include <filesystem>
 
 static std::string folder_;
-static OrthancPluginContext* context_ = NULL;
 static OrthancPlugins::WorklistPurger* purger_;
 
+namespace fs = std::filesystem;
 
 OrthancPluginErrorCode OnChange(OrthancPluginChangeType changeType,OrthancPluginResourceType resourceType, const char*
                                                                                                            resourceId) {
@@ -40,7 +38,7 @@ OrthancPluginErrorCode OnChange(OrthancPluginChangeType changeType,OrthancPlugin
 
 extern "C" {
     ORTHANC_PLUGINS_API int32_t OrthancPluginInitialize(OrthancPluginContext* c) {
-        context_ = c;
+        OrthancPluginContext* context_ = c;
         OrthancPlugins::SetGlobalContext(context_);
         Orthanc::Logging::InitializePluginContext(context_);
 
@@ -60,42 +58,37 @@ extern "C" {
         OrthancPlugins::OrthancConfiguration configuration;
 
         OrthancPlugins::OrthancConfiguration worklistsConf;
+        OrthancPlugins::OrthancConfiguration worklistPurger;
+
         configuration.GetSection(worklistsConf, "Worklists");
+        configuration.GetSection(worklistPurger, "WorklistPurger");
 
+        bool serverEnabled = worklistsConf.GetBooleanValue("Enable", false);
+        bool pluginEnabled = worklistPurger.GetBooleanValue("Enable", false);
 
-        bool enabled = worklistsConf.GetBooleanValue("Enable", false);
+        worklistsConf.LookupStringValue(folder_, "Database");
 
-        if (enabled) {
-        if (worklistsConf.LookupStringValue(folder_, "Database")) {
-            //Registering Callbacks
-            try {
-                /* Create the purger instance */
-                purger_ = new OrthancPlugins::WorklistPurger(context_, folder_);
-                OrthancPluginRegisterOnChangeCallback(context_, OnChange);
-            } catch (std::exception& e) {
-                LOG(ERROR) << e.what();
-                return -1;
-            }
-        return 0;
+        LOG(WARNING) << "WorklistPurger: " << pluginEnabled;
+
+        if (serverEnabled && pluginEnabled && fs::is_directory(fs::path(folder_))) {
+                try {
+                    purger_ = new OrthancPlugins::WorklistPurger(context_, folder_);
+                    OrthancPluginRegisterOnChangeCallback(context_, OnChange);
+                } catch (std::exception& e) {
+                    LOG(ERROR) << e.what();
+                    return -1;
+                }
         } else {
-            LOG(ERROR) << "WorklistFilePurger : The configuration option \"Worklists.Database\" must contain a path in the ORthanc configuration file";
-            return -1;
+          LOG(WARNING) << "Worklist server or WorklistPurger plugin is disabled in the Orthanc configuration file";
+          LOG(WARNING) << "The configuration option \"Worklists.Database\" must contain a path to an existing folder in the Orthanc configuration file";
         }
-
+        return 0;
     }
-    else
-    {
-      LOG(WARNING) << "WorklistFilePurger : Worklist server is disabled in the ORthanc configuration file";
-    }
-
-    return 0;
-
-  }
 
 
   ORTHANC_PLUGINS_API void OrthancPluginFinalize()
   {
-    LOG(WARNING) << "WorklistFilePurger plugin is finalizing";
+    LOG(WARNING) << "WorklistPurger plugin is finalizing";
   }
 
 

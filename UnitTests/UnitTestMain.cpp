@@ -21,15 +21,13 @@
 
 #include <gtest/gtest.h>
 
-#include <orthanc/OrthancCPlugin.h>
-#include "../../Common/OrthancPluginCppWrapper.h"
 #include "/usr/local/include/orthanc_sources/Logging.h"
 
 #include <boost/filesystem.hpp>
 #include <boost/system/error_code.hpp>
 #include <iostream>
 #include <filesystem>
-#include "../Plugins/Purger.h"
+#include "../Framework/Plugins/Purger.h"
 
 void openAndStoreAsString(std::string* result, std::string file) {
         std::ifstream t(file);

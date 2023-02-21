@@ -5,7 +5,7 @@
 
 
 #include <orthanc/OrthancCPlugin.h>
-#include "../../Common/OrthancPluginCppWrapper.h"
+#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 #include "Purger.h"
 #include "/usr/local/include/orthanc_sources/Logging.h"
 
@@ -22,14 +22,16 @@ namespace OrthancPlugins {
         try {
             std::error_code ec;
             if (fs::is_directory(fs::path(folder__), ec)) {
-                folder_ = folder__;
+
             } else {
-                std::cerr << "Error: " << ec << "\n";
-                throw std::runtime_error("Worklist folder does not exist - check configuration file");
+                LOG(ERROR) << "Error: " << ec;
+                throw std::runtime_error("Worklist folder does not exist - check configuration file and restart Orthanc");
             };
         }catch(std::runtime_error e) {
-            std::cerr << e.what() << "\n";
+            LOG(ERROR) << e.what();
+            return;
         }
+        folder_ = folder__;
         context_ = context__;
     };
     WorklistPurger::~WorklistPurger() {};
@@ -64,7 +66,7 @@ namespace OrthancPlugins {
 
         try {
             std::string studyUID = parsed_study["MainDicomTags"]["StudyInstanceUID"].asString();
-            LOG(INFO) << "Study Instance UID of the stable study: %s" << studyUID;
+            LOG(INFO) << "Study Instance UID of the stable study: " << studyUID;
 
             escapeDotsInFilename(&studyUID, result);
             return OrthancPluginErrorCode_Success;
