@@ -20,15 +20,19 @@
 
 #include "Purger.h"
 #include <orthanc/OrthancCPlugin.h>
-#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
-#include "/usr/local/include/orthanc_sources/Logging.h"
-//#include <Logging.h>
-#include <filesystem>
+#include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
+//#include "/usr/local/include/orthanc_sources/Logging.h"
+#include <Logging.h>
+//#include <filesystem>
+
+#include <iostream>
+#include <boost/filesystem.hpp>
+using namespace boost::filesystem;
 
 static std::string folder_;
 static OrthancPlugins::WorklistPurger* purger_;
 
-namespace fs = std::filesystem;
+//namespace fs = boost::filesystem;
 
 OrthancPluginErrorCode OnChange(OrthancPluginChangeType changeType,OrthancPluginResourceType resourceType, const char*
                                                                                                            resourceId) {
@@ -43,13 +47,13 @@ extern "C" {
         Orthanc::Logging::InitializePluginContext(context_);
 
         /* Check the version of the Orthanc core */
-        if (OrthancPluginCheckVersion(context_) == 0) {
-            LOG(ERROR) << "Your version of Orthanc" <<( OrthancPlugins::GetGlobalContext()->orthancVersion)
-                       <<  "must be above "
-                       <<  ORTHANC_PLUGINS_MINIMAL_MAJOR_NUMBER <<"." <<ORTHANC_PLUGINS_MINIMAL_MINOR_NUMBER <<"."
-                       << ORTHANC_PLUGINS_MINIMAL_REVISION_NUMBER << "to run this plugin";
-        return -1;
-        }
+//         if (OrthancPluginCheckVersion(context_) == 0) {
+//             LOG(ERROR) << "Your version of Orthanc " <<( OrthancPlugins::GetGlobalContext()->orthancVersion)
+//                        <<  " must be above "
+//                        <<  ORTHANC_PLUGINS_MINIMAL_MAJOR_NUMBER <<"." <<ORTHANC_PLUGINS_MINIMAL_MINOR_NUMBER <<"."
+//                        << ORTHANC_PLUGINS_MINIMAL_REVISION_NUMBER << " to run this plugin";
+//         return -1;
+//         }
 
         LOG(WARNING) << "WorklistFilePurger :  plugin is initializing";
         OrthancPluginSetDescription(c, "Delete worklist file after receiving a matching instance in Orthanc PACS");
@@ -70,7 +74,7 @@ extern "C" {
 
         LOG(WARNING) << "WorklistPurger: " << pluginEnabled;
 
-        if (serverEnabled && pluginEnabled && fs::is_directory(fs::path(folder_))) {
+        if (serverEnabled && pluginEnabled && is_directory(path(folder_))) {
                 try {
                     purger_ = new OrthancPlugins::WorklistPurger(context_, folder_);
                     OrthancPluginRegisterOnChangeCallback(context_, OnChange);
@@ -101,7 +105,7 @@ extern "C" {
 
   ORTHANC_PLUGINS_API const char* OrthancPluginGetVersion()
   {
-    return WORKLIST_FILE_PURGER_VERSION;
+    return ORTHANC_PLUGIN_VERSION;
   }
 }
 

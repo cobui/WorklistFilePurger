@@ -5,32 +5,19 @@
 
 
 #include <orthanc/OrthancCPlugin.h>
-#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
+#include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 #include "Purger.h"
-#include "/usr/local/include/orthanc_sources/Logging.h"
-
+//#include "/usr/local/include/orthanc_sources/Logging.h"
+#include <Logging.h>
 #include <boost/filesystem.hpp>
 #include <json/value.h>
 #include <json/reader.h>
 #include <iostream>
 #include <regex>
-
+using namespace boost::filesystem;
 
 namespace OrthancPlugins {
     WorklistPurger::WorklistPurger(OrthancPluginContext*  context__, std::string folder__) {
-        namespace fs = std::filesystem;
-        try {
-            std::error_code ec;
-            if (fs::is_directory(fs::path(folder__), ec)) {
-
-            } else {
-                LOG(ERROR) << "Error: " << ec;
-                throw std::runtime_error("Worklist folder does not exist - check configuration file and restart Orthanc");
-            };
-        }catch(std::runtime_error e) {
-            LOG(ERROR) << e.what();
-            return;
-        }
         folder_ = folder__;
         context_ = context__;
     };
@@ -88,11 +75,11 @@ namespace OrthancPlugins {
     }
 
     void WorklistPurger::verifyAndRemoveWorklistFile(std::string* escaped_studyUID) {
-        namespace fs = boost::filesystem;
-        fs::path source(folder_);
-        fs::directory_iterator end;
+        //namespace fs = boost::filesystem;
+        path source(folder_);
+        directory_iterator end;
 
-        for (fs::directory_iterator it(source); it != end; ++it) {
+        for (directory_iterator it(source); it != end; ++it) {
             std::string filename = it->path().filename().string();
             std::string match_string = "(worklist_" + (*escaped_studyUID) + "_)(.*)";
 

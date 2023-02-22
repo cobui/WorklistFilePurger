@@ -1,5 +1,5 @@
 #include <orthanc/OrthancCPlugin.h>
-#include "../../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
+#include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 
 namespace OrthancPlugins {
     class WorklistPurger {

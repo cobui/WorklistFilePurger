@@ -1,86 +1,163 @@
-# Orthanc - A Lightweight, RESTful DICOM Store
-# Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
-# Department, University Hospital of Liege, Belgium
-# Copyright (C) 2017-2020 Osimis S.A., Belgium
+# Advanced authorization plugin for Orthanc
+# Copyright (C) 2017-2023 Osimis S.A., Belgium
 #
 # This program is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
-# 
+# modify it under the terms of the GNU Affero General Public License
+# as published by the Free Software Foundation, either version 3 of
+# the License, or (at your option) any later version.
+#
 # This program is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-# General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Affero General Public License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 
 cmake_minimum_required(VERSION 2.8)
 
-project(WorklistFilePurger)
+project(OrthancAuthorization)
+
+set(ORTHANC_PLUGIN_VERSION "mainline")
 
 if (ORTHANC_PLUGIN_VERSION STREQUAL "mainline")
-    set(ORTHANC_FRAMEWORK_VERSION "mainline")
-    set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "hg")
+  set(ORTHANC_FRAMEWORK_VERSION "mainline")
+  set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "hg")
+else()
+  set(ORTHANC_FRAMEWORK_VERSION "1.9.3")
+  set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
+endif()
+
+# Parameters of the build
+set(STATIC_BUILD OFF CACHE BOOL "Static build of the third-party libraries (necessary for Windows)")
+set(ALLOW_DOWNLOADS OFF CACHE BOOL "Allow CMake to download packages")
+set(ORTHANC_FRAMEWORK_SOURCE "${ORTHANC_FRAMEWORK_DEFAULT_SOURCE}" CACHE STRING "Source of the Orthanc source code (can be \"hg\", \"archive\", \"web\" or \"path\")")
+set(ORTHANC_FRAMEWORK_ARCHIVE "" CACHE STRING "Path to the Orthanc archive, if ORTHANC_FRAMEWORK_SOURCE is \"archive\"")
+set(ORTHANC_FRAMEWORK_ROOT "" CACHE STRING "Path to the Orthanc source directory, if ORTHANC_FRAMEWORK_SOURCE is \"path\"")
+
+# Advanced parameters to fine-tune linking against system libraries
+set(USE_SYSTEM_ORTHANC_SDK ON CACHE BOOL "Use the system version of the Orthanc plugin SDK")
+set(ORTHANC_SDK_VERSION "1.11.3" CACHE STRING "Version of the Orthanc plugin SDK to use, if not using the system version (can be \"1.3.1\" \"1.11.3\")")
+
+# Download and setup the Orthanc framework
+include(${CMAKE_SOURCE_DIR}/Resources/Orthanc/CMake/DownloadOrthancFramework.cmake)
+add_definitions(-DAT_NO_AUTOMOUNT=0)
+if (ORTHANC_FRAMEWORK_SOURCE STREQUAL "system")
+  if (ORTHANC_FRAMEWORK_USE_SHARED)
+    include(FindBoost)
+    find_package(Boost COMPONENTS regex system)
+    
+    if (NOT Boost_FOUND)
+      message(FATAL_ERROR "Unable to locate Boost on this system")
+    endif()
+    
+    link_libraries(${Boost_LIBRARIES} jsoncpp)
+  endif()
+  
+  link_libraries(${ORTHANC_FRAMEWORK_LIBRARIES})
+
+else()
+  include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/OrthancFrameworkParameters.cmake)
+
+  set(ENABLE_LOCALE OFF)           # Disable support for locales (notably in Boost)
+  set(ENABLE_MODULE_IMAGES OFF)
+  set(ENABLE_MODULE_JOBS OFF)
+  set(ENABLE_MODULE_DICOM OFF)
+  set(ENABLE_WEB_CLIENT ON)
+
+  include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/OrthancFrameworkConfiguration.cmake)
+  include_directories(${ORTHANC_FRAMEWORK_ROOT})
+endif()
+
+
+include(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Plugins/OrthancPluginsExports.cmake)
+SET(CMAKE_CXX_FLAGS "-std=c++17")
+
+# Check that the Orthanc SDK headers are available
+if (STATIC_BUILD OR NOT USE_SYSTEM_ORTHANC_SDK)
+  if (ORTHANC_SDK_VERSION STREQUAL "1.3.1")
+    include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Sdk-1.3.1)
+  elseif (ORTHANC_SDK_VERSION STREQUAL "1.11.3")
+    include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Sdk-1.11.3)
+  else()
+    message(FATAL_ERROR "Unsupported version of the Orthanc plugin SDK: ${ORTHANC_SDK_VERSION}")
+  endif()
+
+
+include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc//Sdk-1.3.1)
 else ()
-    set(ORTHANC_FRAMEWORK_VERSION "1.9.0")
-    set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
-endif ()
+  CHECK_INCLUDE_FILE_CXX(orthanc/OrthancCPlugin.h HAVE_ORTHANC_H)
+  if (NOT HAVE_ORTHANC_H)
+    message(FATAL_ERROR "Please install the headers of the Orthanc plugins SDK")
+  endif()
+endif()
 
-SET(ALLOW_DOWNLOADS ON)
 
-SET(ORTHANC_FRAMEWORK_SOURCE "web")
-include(${ORTHANC_DIR}/OrthancFramework/Resources/CMake/DownloadOrthancFramework.cmake)
-include(${CMAKE_SOURCE_DIR}/Resources/CMake/WorklistRemoverPluginParameters.cmake)
-include(${ORTHANC_DIR}/OrthancServer/Plugins/Samples/Common/OrthancPlugins.cmake)
-include(${ORTHANC_DIR}/OrthancFramework/Resources/CMake/JsonCppConfiguration.cmake)
-include(${ORTHANC_DIR}/OrthancFramework/Resources/CMake/BoostConfiguration.cmake)
-include(${ORTHANC_DIR}/OrthancFramework/Resources/CMake/GoogleTestConfiguration.cmake)
-include(${ORTHANC_DIR}/OrthancFramework/Resources/CMake/OrthancFrameworkConfiguration.cmake)
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR
+    ${CMAKE_SYSTEM_NAME} STREQUAL "kFreeBSD" OR
+    ${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+  link_libraries(rt)
+elseif (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  execute_process(
+    COMMAND 
+    ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/Resources/WindowsResources.py
+    ${ORTHANC_PLUGIN_VERSION} "WorklistPurger" WorklistPurger.dll "Advanced authorization plugin for Orthanc"
+    ERROR_VARIABLE Failure
+    OUTPUT_FILE ${AUTOGENERATED_DIR}/Version.rc
+    )
 
+  if (Failure)
+    message(FATAL_ERROR "Error while computing the version information: ${Failure}")
+  endif()
+
+  list(APPEND AUTOGENERATED_SOURCES  ${AUTOGENERATED_DIR}/Version.rc)
+endif()
+
+if (APPLE)
+  SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -framework CoreFoundation")
+  SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -framework CoreFoundation")
+endif()
+
+add_definitions(
+  -DHAS_ORTHANC_EXCEPTION=1
+  -DORTHANC_ENABLE_LOGGING_PLUGIN=1
+  )
 
 SET(CMAKE_CXX_FLAGS "-std=c++17")
 
-add_library(WorklistFilePurger SHARED
-    Framework/Plugins/Plugin.cpp
-    Framework/Plugins/Purger.cpp
-    ${CMAKE_SOURCE_DIR}/../Common/OrthancPluginCppWrapper.cpp
-    ${JSONCPP_SOURCES}
-    ${BOOST_SOURCES}
-    ${LOGGING_SOURCES}
-    ${AUTOGENERATED_SOURCES}
-)
-
-message("Setting the version of the plugin to ${WORKLIST_FILE_PURGER_VERSION}")
-
-add_definitions(
-  -DWORKLIST_FILE_PURGER_VERSION="${WORKLIST_FILE_PURGER_VERSION}"
+add_library(WorklistPurger SHARED
+  ${CMAKE_SOURCE_DIR}/Plugin/Plugin.cpp
+  ${CMAKE_SOURCE_DIR}/Plugin/Purger.cpp
+  ${CMAKE_SOURCE_DIR}/Resources/Orthanc/Plugins/OrthancPluginCppWrapper.cpp
+  ${ORTHANC_CORE_SOURCES}
+  ${AUTOGENERATED_SOURCES}
   )
 
-set_target_properties(WorklistFilePurger PROPERTIES 
-  VERSION ${WORKLIST_FILE_PURGER_VERSION} 
-  SOVERSION ${WORKLIST_FILE_PURGER_VERSION}
-  COMPILE_FLAGS -DORTHANC_ENABLE_LOGGING_PLUGIN=1
-  )
+
+message("Setting the version of the plugin to ${ORTHANC_PLUGIN_VERSION}")
+add_definitions(-DORTHANC_PLUGIN_VERSION="${ORTHANC_PLUGIN_VERSION}")
+
+set_target_properties(WorklistPurger PROPERTIES
+  VERSION ${ORTHANC_PLUGIN_VERSION} 
+  SOVERSION ${ORTHANC_PLUGIN_VERSION})
 
 install(
-  TARGETS WorklistFilePurger
+  TARGETS WorklistPurger
   RUNTIME DESTINATION lib    # Destination for Windows
   LIBRARY DESTINATION share/orthanc/plugins    # Destination for Linux
   )
 
+  include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/GoogleTestConfiguration.cmake)
 
 add_executable(UnitTest
-    UnitTests/UnitTestMain.cpp
-    Framework/Plugins/Plugin.cpp
-    Framework/Plugins/Purger.cpp
-    ${CMAKE_SOURCE_DIR}/../Common/OrthancPluginCppWrapper.cpp
-    ${JSONCPP_SOURCES}
+    UnitTest/UnitTestMain.cpp
+    Plugin/Plugin.cpp
+    Plugin/Purger.cpp
+    ${CMAKE_SOURCE_DIR}/Resources/Orthanc/Plugins/OrthancPluginCppWrapper.cpp
     ${GOOGLE_TEST_SOURCES}
-    ${BOOST_SOURCES}
-    ${LOGGING_SOURCES}
+    ${ORTHANC_CORE_SOURCES}
+    ${AUTOGENERATED_SOURCES}
   )
 
 
