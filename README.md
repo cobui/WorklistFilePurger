@@ -18,18 +18,10 @@ cmake .. -DSTATIC_BUILD=ON -DCMAKE_BUILD_TYPE=Release
 make
 ```
 
-#### Callback functions used
+#### Callback function used
 ```bash
 OrthancPluginRegisterOnChangeCallback
 ```
 
 #### Side note 1
 This plugin identifies the worklist files based on a set naming scheme which is: "worklist_${studyUID}_(.*)". If your worklist files follow any other naming scheme, the plugin will not pick these files up and will not delete them!
-
-#### Side note 2
-The starting point of this plugin functionality is the OrthancPluginRegisterOnChangeCallback function by listening to the OnStableStuy event.
-
-More ideal way is to use Modality Peroformed Procedure Step (MPPS) and it can be achieved by using RegisterOnChangeCallback function as per the below Orthanc group discussion.
-https://groups.google.com/g/orthanc-users/c/Tec0xgD4s2c
-There is a plan to implement RegisterOnChangeCallback in the future release of this plugin.
-

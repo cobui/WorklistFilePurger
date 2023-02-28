@@ -19,13 +19,13 @@ cmake_minimum_required(VERSION 2.8)
 
 project(OrthancAuthorization)
 
-set(ORTHANC_PLUGIN_VERSION "mainline")
+set(ORTHANC_PLUGIN_VERSION "1.9.1")
 
 if (ORTHANC_PLUGIN_VERSION STREQUAL "mainline")
   set(ORTHANC_FRAMEWORK_VERSION "mainline")
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "hg")
 else()
-  set(ORTHANC_FRAMEWORK_VERSION "1.9.3")
+  set(ORTHANC_FRAMEWORK_VERSION "1.9.1")
   set(ORTHANC_FRAMEWORK_DEFAULT_SOURCE "web")
 endif()
 
@@ -35,10 +35,6 @@ set(ALLOW_DOWNLOADS OFF CACHE BOOL "Allow CMake to download packages")
 set(ORTHANC_FRAMEWORK_SOURCE "${ORTHANC_FRAMEWORK_DEFAULT_SOURCE}" CACHE STRING "Source of the Orthanc source code (can be \"hg\", \"archive\", \"web\" or \"path\")")
 set(ORTHANC_FRAMEWORK_ARCHIVE "" CACHE STRING "Path to the Orthanc archive, if ORTHANC_FRAMEWORK_SOURCE is \"archive\"")
 set(ORTHANC_FRAMEWORK_ROOT "" CACHE STRING "Path to the Orthanc source directory, if ORTHANC_FRAMEWORK_SOURCE is \"path\"")
-
-# Advanced parameters to fine-tune linking against system libraries
-set(USE_SYSTEM_ORTHANC_SDK ON CACHE BOOL "Use the system version of the Orthanc plugin SDK")
-set(ORTHANC_SDK_VERSION "1.11.3" CACHE STRING "Version of the Orthanc plugin SDK to use, if not using the system version (can be \"1.3.1\" \"1.11.3\")")
 
 # Download and setup the Orthanc framework
 include(${CMAKE_SOURCE_DIR}/Resources/Orthanc/CMake/DownloadOrthancFramework.cmake)
@@ -61,38 +57,16 @@ else()
   include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/OrthancFrameworkParameters.cmake)
 
   set(ENABLE_LOCALE OFF)           # Disable support for locales (notably in Boost)
-  set(ENABLE_MODULE_IMAGES OFF)
-  set(ENABLE_MODULE_JOBS OFF)
-  set(ENABLE_MODULE_DICOM OFF)
-  set(ENABLE_WEB_CLIENT ON)
 
   include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/OrthancFrameworkConfiguration.cmake)
   include_directories(${ORTHANC_FRAMEWORK_ROOT})
 endif()
 
-
 include(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Plugins/OrthancPluginsExports.cmake)
+
 SET(CMAKE_CXX_FLAGS "-std=c++17")
 
-# Check that the Orthanc SDK headers are available
-if (STATIC_BUILD OR NOT USE_SYSTEM_ORTHANC_SDK)
-  if (ORTHANC_SDK_VERSION STREQUAL "1.3.1")
-    include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Sdk-1.3.1)
-  elseif (ORTHANC_SDK_VERSION STREQUAL "1.11.3")
-    include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Sdk-1.11.3)
-  else()
-    message(FATAL_ERROR "Unsupported version of the Orthanc plugin SDK: ${ORTHANC_SDK_VERSION}")
-  endif()
-
-
-include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc//Sdk-1.3.1)
-else ()
-  CHECK_INCLUDE_FILE_CXX(orthanc/OrthancCPlugin.h HAVE_ORTHANC_H)
-  if (NOT HAVE_ORTHANC_H)
-    message(FATAL_ERROR "Please install the headers of the Orthanc plugins SDK")
-  endif()
-endif()
-
+include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Sdk-1.11.3)
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux" OR
     ${CMAKE_SYSTEM_NAME} STREQUAL "kFreeBSD" OR
@@ -148,7 +122,7 @@ install(
   LIBRARY DESTINATION share/orthanc/plugins    # Destination for Linux
   )
 
-  include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/GoogleTestConfiguration.cmake)
+include(${ORTHANC_FRAMEWORK_ROOT}/../Resources/CMake/GoogleTestConfiguration.cmake)
 
 add_executable(UnitTest
     UnitTest/UnitTestMain.cpp

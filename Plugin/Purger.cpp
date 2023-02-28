@@ -7,7 +7,6 @@
 #include <orthanc/OrthancCPlugin.h>
 #include "../Resources/Orthanc/Plugins/OrthancPluginCppWrapper.h"
 #include "Purger.h"
-//#include "/usr/local/include/orthanc_sources/Logging.h"
 #include <Logging.h>
 #include <boost/filesystem.hpp>
 #include <json/value.h>
@@ -75,7 +74,6 @@ namespace OrthancPlugins {
     }
 
     void WorklistPurger::verifyAndRemoveWorklistFile(std::string* escaped_studyUID) {
-        //namespace fs = boost::filesystem;
         path source(folder_);
         directory_iterator end;
 
