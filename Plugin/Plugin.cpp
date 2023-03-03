@@ -1,21 +1,19 @@
 /**
- * Orthanc - A Lightweight, RESTful DICOM Store
- * Copyright (C) 2012-2016 Sebastien Jodogne, Medical Physics
- * Department, University Hospital of Liege, Belgium
- * Copyright (C) 2017-2020 Osimis S.A., Belgium
+ * Worklist Purger Plugin - A plugin for Orthanc DICOM Server for removing worklist files for stable studies
+ * Copyright (C) 2017 - 2023  (Doc Cirrus GmbH)
  *
- * This program is free software: you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- * 
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- * General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  **/
 
 #include "Purger.h"
@@ -70,7 +68,8 @@ extern "C" {
 
         LOG(WARNING) << "WorklistPurger: " << pluginEnabled;
 
-        if (serverEnabled && pluginEnabled && is_directory(path(folder_))) {
+        if (serverEnabled && pluginEnabled) {
+            if (is_directory(path(folder_))) {
                 try {
                     purger_ = new OrthancPlugins::WorklistPurger(context_, folder_);
                     OrthancPluginRegisterOnChangeCallback(context_, OnChange);
@@ -78,9 +77,11 @@ extern "C" {
                     LOG(ERROR) << e.what();
                     return -1;
                 }
+            } else {
+                LOG(WARNING) << "The configuration option \"Worklists.Database\" must contain a path to an existing folder in the Orthanc configuration file";
+            }
         } else {
           LOG(WARNING) << "Worklist server or WorklistPurger plugin is disabled in the Orthanc configuration file";
-          LOG(WARNING) << "The configuration option \"Worklists.Database\" must contain a path to an existing folder in the Orthanc configuration file";
         }
         return 0;
     }
