@@ -2,7 +2,7 @@
 
 cmake_minimum_required(VERSION 2.8)
 
-project(OrthancAuthorization)
+project(WorklistPurger)
 
 set(ORTHANC_PLUGIN_VERSION "1.9.1")
 
@@ -49,7 +49,7 @@ endif()
 
 include(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Plugins/OrthancPluginsExports.cmake)
 
-SET(CMAKE_CXX_FLAGS "-std=c++17")
+#SET(CMAKE_CXX_FLAGS "-std=c++17")
 
 include_directories(${CMAKE_SOURCE_DIR}/Resources/Orthanc/Sdk-1.11.3)
 
