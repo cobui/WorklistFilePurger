@@ -66,8 +66,6 @@ extern "C" {
 
         worklistsConf.LookupStringValue(folder_, "Database");
 
-        LOG(WARNING) << "WorklistPurger: " << pluginEnabled;
-
         if (serverEnabled && pluginEnabled) {
             if (is_directory(path(folder_))) {
                 try {
