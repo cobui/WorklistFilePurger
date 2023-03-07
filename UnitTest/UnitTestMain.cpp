@@ -25,7 +25,6 @@
 #include <boost/move/make_unique.hpp>
 #include <boost/move/unique_ptr.hpp>
 #include <fstream>
-#include <filesystem>
 #include "../Plugin/Purger.h"
 
 namespace move = boost::movelib;
