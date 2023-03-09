@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+# Taken from https://hg.orthanc-server.com/orthanc-authorization/
+
 #
 # This maintenance script updates the content of the "Orthanc" folder
 # to match the latest version of the Orthanc source code.

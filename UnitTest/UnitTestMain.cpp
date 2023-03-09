@@ -105,8 +105,6 @@ class WorklistRemoverTest : public ::testing::Test {
 };
 
 TEST_F(WorklistRemoverTest, getStudyUID) {
-    const char* uri = "/studies/27f7126f-4f66fb14-03f4081b-f9341db2-53925988";
-
     const char* resourceId = "27f7126f-4f66fb14-03f4081b-f9341db2-53925988";
     std::string result;
     ASSERT_EQ(purger_->getStudyUID(resourceId, &result), OrthancPluginErrorCode_Success);
