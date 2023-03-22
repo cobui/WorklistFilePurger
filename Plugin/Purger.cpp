@@ -25,6 +25,7 @@
 #include <json/reader.h>
 #include <iostream>
 #include <regex>
+
 using namespace boost::filesystem;
 
 namespace OrthancPlugins {
@@ -95,11 +96,21 @@ namespace OrthancPlugins {
 
             if (std::regex_match(filename, std::regex(match_string))) {
                 LOG(WARNING) << "Found a matching worklist file file for Study Instance UID " << *escaped_studyUID;
-                if (remove(it->path())) {
-                    LOG(WARNING) << "Worklist file was successfully deleted";
-                } else {
-                    LOG(ERROR) << "Unable to delete worklist file";
-                };
+//                 boost::system::error_code ec;
+//                 if (remove(it->path(), ec)) {
+//                     LOG(WARNING) << "Worklist file was successfully deleted";
+//                 } else {
+//                     LOG(ERROR) << "Unable to delete worklist file" << ec;
+//                 };
+                try {
+                    if (remove(it->path())) {
+                        LOG(WARNING) << "Worklist file was successfully deleted";
+                    } else {
+                        LOG(ERROR) << "Unable to delete worklist file";
+                    }
+                } catch (filesystem_error error) {
+                    LOG(ERROR) << "Exception when attempting to remove worklist file " << error.what();
+                }
                 return;
             }
         }
